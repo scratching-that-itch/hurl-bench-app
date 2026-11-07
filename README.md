@@ -73,8 +73,8 @@ under `bundle/macos/` and a `.dmg` under `bundle/dmg/`.
 
 ## Releases (GitHub Actions)
 
-`.github/workflows/release.yml` builds installers for macOS (Apple Silicon
-and Intel) and Windows (x64) and attaches them to a draft GitHub release.
+`.github/workflows/release.yml` builds installers for macOS (Apple Silicon)
+and Windows (x64) and attaches them to a draft GitHub release.
 
 To cut a release, bump `version` in `package.json` and
 `src-tauri/tauri.conf.json`, then tag and push:

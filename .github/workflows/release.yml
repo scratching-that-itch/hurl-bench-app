@@ -17,9 +17,6 @@ jobs:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
-          # macos-13 runners are retired; cross-compile Intel on the arm runner
-          - os: macos-latest
-            target: x86_64-apple-darwin
           - os: windows-latest
             target: x86_64-pc-windows-msvc
 
