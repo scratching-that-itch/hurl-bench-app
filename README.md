@@ -73,6 +73,42 @@ pnpm tauri build
 Artifacts land in `src-tauri/target/release/bundle/` — on macOS an `.app`
 under `bundle/macos/` and a `.dmg` under `bundle/dmg/`.
 
+## Releases (GitHub Actions)
+
+`.github/workflows/release.yml` builds installers for macOS (Apple Silicon
+and Intel) and Windows (x64) and attaches them to a draft GitHub release.
+
+To cut a release, bump `version` in `package.json` and
+`src-tauri/tauri.conf.json`, then tag and push:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow runs on `v*` tags (or manually via *Actions → Release → Run
+workflow*). Binaries are **unsigned**, so macOS will show a Gatekeeper
+warning — right-click → Open, or run
+`xattr -cr /Applications/hurl-bench.app`.
+
+## Auto-update
+
+The app checks `releases/latest/download/latest.json` on startup and offers
+to download, install, and restart when a newer tag is published. Updates are
+minisign-signed; the public key is baked into `src-tauri/tauri.conf.json`.
+
+For CI to produce signed update artifacts (`latest.json` + `.sig` files),
+add this repository secret (*Settings → Secrets and variables → Actions*):
+
+- `TAURI_SIGNING_PRIVATE_KEY` — contents of `~/.tauri/hurl-bench-app.key`
+  (generated locally with `pnpm tauri signer generate`; the key has no
+  password, so `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` can stay unset).
+
+Keep the private key safe — losing it means existing installs can no longer
+verify updates. To sign the app bundles themselves (removing the Gatekeeper
+warning), add the `APPLE_*` / Windows certificate secrets documented at
+<https://tauri.app/distribute/sign/macos/>.
+
 ## Test server & sample workspace
 
 [`hurl-bench-sample-server`](../hurl-bench-sample-server/) (a sibling
@@ -100,18 +136,19 @@ src/                  Vue frontend
   stores/             workspace state (reactive module, files on disk)
 src-tauri/            Tauri backend
   src/lib.rs          run_hurl (bundled hurl crate) + workspace file commands
-decisions/            Architecture decision records
-diary/                Development diary
-style/                UI & code style guide
+.github/workflows/    Release pipeline (GitHub Actions)
 
 Sibling folders:
 ../hurl-bench-sample-server/   Zig + http.zig test endpoint for the hurl samples (ADR 0006)
 ../workspace/samples/          .hurl files mirroring the hurl README samples
+../design/                     decisions/, diary/, style/, test-scenarios/ docs
 ```
 
 ## Docs
 
-- [decisions/](decisions/README.md) — why the stack and execution model look
-  the way they do
-- [diary/](diary/README.md) — chronological dev log and gotchas
-- [style/](style/README.md) — UI density, colors, and code conventions
+The design docs live in the sibling `../design/` folder:
+
+- `design/decisions/` — why the stack and execution model look the way they do
+- `design/diary/` — chronological dev log and gotchas
+- `design/style/` — UI density, colors, and code conventions
+- `design/test-scenarios/` — test scenario documents
