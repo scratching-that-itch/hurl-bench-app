@@ -26,13 +26,11 @@ need the hurl CLI installed.
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org) 18+ and [pnpm](https://pnpm.io) (see ADR 0004)
+- [Node.js](https://nodejs.org) 18+ and [pnpm](https://pnpm.io)
 - [Rust](https://rustup.rs) (stable)
 - Tauri platform prerequisites — on macOS: Xcode Command Line Tools
   (`xcode-select --install`). See
   <https://tauri.app/start/prerequisites/> for other platforms.
-- Optional: [Zig](https://ziglang.org) 0.17 — only for the
-  `hurl-bench-sample-server` endpoint, not for the app itself.
 
 ## Install
 
@@ -109,23 +107,6 @@ verify updates. To sign the app bundles themselves (removing the Gatekeeper
 warning), add the `APPLE_*` / Windows certificate secrets documented at
 <https://tauri.app/distribute/sign/macos/>.
 
-## Test server & sample workspace
-
-[`hurl-bench-sample-server`](../hurl-bench-sample-server/) (a sibling
-folder) is a small Zig + [http.zig](https://github.com/karlseguin/http.zig)
-service (ADR 0006) that implements every scenario from the
-[hurl README samples](https://github.com/Orange-OpenSource/hurl#samples) on
-`127.0.0.1:8383` — a deterministic endpoint for trying out the app.
-
-```bash
-cd ../hurl-bench-sample-server
-zig build run    # needs Zig 0.17; binary: zig-out/bin/hurl-bench-sample-server
-```
-
-Matching `.hurl` files live in `../workspace/samples/` (next to this repo):
-open `workspace/` in the app, or run the whole suite with the CLI —
-see [workspace/samples/README.md](../workspace/samples/README.md).
-
 ## Project layout
 
 ```
@@ -137,18 +118,4 @@ src/                  Vue frontend
 src-tauri/            Tauri backend
   src/lib.rs          run_hurl (bundled hurl crate) + workspace file commands
 .github/workflows/    Release pipeline (GitHub Actions)
-
-Sibling folders:
-../hurl-bench-sample-server/   Zig + http.zig test endpoint for the hurl samples (ADR 0006)
-../workspace/samples/          .hurl files mirroring the hurl README samples
-../design/                     decisions/, diary/, style/, test-scenarios/ docs
 ```
-
-## Docs
-
-The design docs live in the sibling `../design/` folder:
-
-- `design/decisions/` — why the stack and execution model look the way they do
-- `design/diary/` — chronological dev log and gotchas
-- `design/style/` — UI density, colors, and code conventions
-- `design/test-scenarios/` — test scenario documents
