@@ -32,8 +32,18 @@ import WelcomeScreen from "@/components/WelcomeScreen.vue";
 import { hurlVersion } from "@/lib/runner";
 import { theme, toggleTheme } from "@/lib/theme";
 import {
+  checkForUpdates,
+  downloadProgress,
+  installUpdate,
+  pendingUpdate,
+  restartApp,
+  updateError,
+  updatePhase,
+} from "@/lib/updater";
+import {
   activeEntry,
   activeModel,
+  anyDirty,
   closeFile,
   deleteEntry,
   isDirty,
@@ -41,7 +51,7 @@ import {
   pickWorkspace,
   refreshFiles,
   runEntry,
-  saveActiveFile,
+  saveAllFiles,
   workspace,
 } from "@/stores/workspace";
 
@@ -83,19 +93,22 @@ const showFileDetails = computed(
     activeModel.value && !activeModel.value.raw && !activeEntry.value,
 );
 
-const dirtyActive = computed(() =>
-  activeModel.value ? isDirty(activeModel.value) : false,
-);
+const updateProgressPct = computed(() => {
+  const { downloaded, total } = downloadProgress.value;
+  if (!total) return 0;
+  return Math.min(100, Math.round((downloaded / total) * 100));
+});
 
 onMounted(async () => {
   version.value = await hurlVersion();
   if (workspace.workspaceDir) refreshFiles();
+  checkForUpdates();
 });
 
 function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === "s") {
     e.preventDefault();
-    saveActiveFile();
+    saveAllFiles();
   }
   if (
     (e.metaKey || e.ctrlKey) &&
@@ -142,10 +155,10 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
       <Button
         variant="outline"
         size="sm"
-        class="ml-auto h-7 px-2 font-mono text-[10px]"
-        :disabled="!dirtyActive"
-        title="Save file"
-        @click="saveActiveFile"
+        class="ml-auto h-7 px-2 font-mono text-[10px] disabled:pointer-events-auto disabled:cursor-pointer"
+        :disabled="!anyDirty"
+        title="Save all files"
+        @click="saveAllFiles"
       >
         Save (⌘ + S)
       </Button>
@@ -245,6 +258,68 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
           <Button variant="destructive" size="sm" @click="confirmDeleteEntry">
             Delete
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog
+      :open="updatePhase !== 'idle'"
+      @update:open="(v) => { if (!v && updatePhase !== 'downloading') updatePhase = 'idle'; }"
+    >
+      <DialogContent class="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle v-if="updatePhase === 'ready'">Update installed</DialogTitle>
+          <DialogTitle v-else>Update available</DialogTitle>
+          <DialogDescription v-if="pendingUpdate">
+            Version
+            <span class="font-mono font-medium">{{ pendingUpdate.version }}</span>
+            <template v-if="updatePhase === 'ready'">
+              is installed. Restart Hurl Bench to use it.
+            </template>
+            <template v-else>is available.</template>
+          </DialogDescription>
+        </DialogHeader>
+        <div
+          v-if="pendingUpdate?.body && updatePhase === 'available'"
+          class="max-h-40 overflow-y-auto rounded-md border bg-muted/40 p-2 text-xs whitespace-pre-wrap"
+        >
+          {{ pendingUpdate.body }}
+        </div>
+        <div v-if="updatePhase === 'downloading'" class="space-y-1.5">
+          <div class="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              class="h-full bg-primary transition-all"
+              :style="{ width: `${updateProgressPct}%` }"
+            />
+          </div>
+          <p class="font-mono text-[10px] text-muted-foreground">
+            Downloading… {{ updateProgressPct }}%
+          </p>
+        </div>
+        <p v-if="updatePhase === 'error'" class="text-xs text-destructive">
+          Update failed: {{ updateError }}
+        </p>
+        <DialogFooter>
+          <template v-if="updatePhase === 'ready'">
+            <Button size="sm" @click="restartApp">Restart now</Button>
+          </template>
+          <template v-else>
+            <Button
+              variant="outline"
+              size="sm"
+              :disabled="updatePhase === 'downloading'"
+              @click="updatePhase = 'idle'"
+            >
+              Later
+            </Button>
+            <Button
+              size="sm"
+              :disabled="updatePhase === 'downloading'"
+              @click="installUpdate"
+            >
+              {{ updatePhase === 'error' ? 'Retry' : 'Download & install' }}
+            </Button>
+          </template>
         </DialogFooter>
       </DialogContent>
     </Dialog>

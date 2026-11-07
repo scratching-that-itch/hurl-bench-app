@@ -66,5 +66,7 @@ export interface RunResult {
   /** One response per request (entry) in the run, in file order. */
   responses: ParsedResponse[];
   response: ParsedResponse | null;
+  /** True for whole-file runs (CLI output is the primary view). */
+  fileRun: boolean;
   error: string | null;
 }

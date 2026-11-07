@@ -78,6 +78,14 @@ interface PersistedState {
   activeEntryId: string | null;
 }
 
+/** Last session's open tabs, reused when the same workspace is picked again. */
+let lastSession: {
+  dir: string;
+  openPaths: string[];
+  activePath: string | null;
+  activeEntryId: string | null;
+} | null = null;
+
 function load(): WorkspaceState {
   const state: WorkspaceState = {
     workspaceDir: null,
@@ -95,13 +103,18 @@ function load(): WorkspaceState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<PersistedState>;
+      if (parsed.workspaceDir) {
+        lastSession = {
+          dir: parsed.workspaceDir,
+          openPaths: parsed.openPaths ?? [],
+          activePath: parsed.activePath ?? null,
+          activeEntryId: parsed.activeEntryId ?? null,
+        };
+      }
       return {
         ...state,
-        workspaceDir: parsed.workspaceDir ?? null,
+        // Always start on the workspace chooser — never resume directly.
         recentWorkspaces: parsed.recentWorkspaces ?? [],
-        openPaths: parsed.openPaths ?? [],
-        activePath: parsed.activePath ?? null,
-        activeEntryId: parsed.activeEntryId ?? null,
       };
     }
   } catch {
@@ -211,9 +224,10 @@ export function removeRecentWorkspace(dir: string) {
 
 export async function openWorkspaceDir(dir: string) {
   workspace.workspaceDir = dir;
-  workspace.openPaths = [];
-  workspace.activePath = null;
-  workspace.activeEntryId = null;
+  const resume = lastSession?.dir === dir ? lastSession : null;
+  workspace.openPaths = resume?.openPaths ?? [];
+  workspace.activePath = resume?.activePath ?? null;
+  workspace.activeEntryId = resume?.activeEntryId ?? null;
   workspace.models = {};
   await refreshFiles();
   // refreshFiles toasts and keeps going on a missing/unreadable dir — but a
@@ -387,6 +401,11 @@ export async function saveFile(relPath: string): Promise<boolean> {
   }
 }
 
+/** True when any loaded file has unsaved changes. */
+export const anyDirty = computed(() =>
+  Object.values(workspace.models).some((model) => isDirty(model)),
+);
+
 export async function saveActiveFile() {
   if (workspace.activePath) {
     const saved = await saveFile(workspace.activePath);
@@ -394,9 +413,26 @@ export async function saveActiveFile() {
   }
 }
 
+/** Saves every loaded file with unsaved changes. */
+export async function saveAllFiles() {
+  const dirty = Object.keys(workspace.models).filter((relPath) =>
+    isDirty(workspace.models[relPath]),
+  );
+  if (dirty.length === 0) return;
+  const results = await Promise.all(dirty.map(saveFile));
+  const savedCount = results.filter(Boolean).length;
+  if (savedCount === 0) return;
+  toast.success(
+    savedCount === dirty.length
+      ? `Saved ${savedCount === 1 ? dirty[0] : `${savedCount} files`}`
+      : `Saved ${savedCount} of ${dirty.length} files`,
+  );
+}
+
 async function pushRun(
   key: string,
   name: string,
+  fileRun: boolean,
   run: () => Promise<RunResult>,
 ): Promise<RunResult | null> {
   if (workspace.running) return null;
@@ -419,6 +455,7 @@ async function pushRun(
       report: "",
       responses: [],
       response: null,
+      fileRun,
       error: String(e),
     });
     return null;
@@ -427,8 +464,22 @@ async function pushRun(
   }
 }
 
-async function execute(name: string, key: string, content: string): Promise<RunResult> {
-  const out = await runHurl(content);
+/** Absolute directory of a workspace-relative file, for hurl's file root. */
+function fileRootFor(relPath: string): string | undefined {
+  const dir = workspace.workspaceDir;
+  if (!dir) return undefined;
+  const idx = relPath.lastIndexOf("/");
+  return idx === -1 ? dir : `${dir}/${relPath.slice(0, idx)}`;
+}
+
+async function execute(
+  name: string,
+  key: string,
+  content: string,
+  filename: string,
+  fileRun: boolean,
+): Promise<RunResult> {
+  const out = await runHurl(content, filename, fileRootFor(filename));
   const responses = parseResponses(out.report, out.bodies);
   return {
     id: uid(),
@@ -442,6 +493,7 @@ async function execute(name: string, key: string, content: string): Promise<RunR
     report: out.report,
     responses,
     response: responses.length ? responses[responses.length - 1] : null,
+    fileRun,
     error: out.exit_code === 0 ? null : out.stderr || "hurl exited non-zero",
   };
 }
@@ -482,8 +534,8 @@ export async function runEntry(relPath: string, entry: HurlEntry) {
   if (unnamed) entry.name = generatedEntryName(entry);
   await saveFile(relPath);
   const content = serializeEntry(entry);
-  const result = await pushRun(entry.id, entry.name, () =>
-    execute(entry.name, entry.id, content),
+  const result = await pushRun(entry.id, entry.name, false, () =>
+    execute(entry.name, entry.id, content, relPath, false),
   );
   recordRunHistory(relPath, content, result, [entry.body], entry.name);
 }
@@ -493,8 +545,8 @@ export async function runFile(relPath: string) {
   if (!model) return;
   await saveFile(relPath);
   const content = modelContent(model);
-  const result = await pushRun(relPath, relPath, () =>
-    execute(relPath, relPath, content),
+  const result = await pushRun(relPath, relPath, true, () =>
+    execute(relPath, relPath, content, relPath, true),
   );
   recordRunHistory(
     relPath,

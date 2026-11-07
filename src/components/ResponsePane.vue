@@ -10,14 +10,22 @@ import { latestRun } from "@/stores/workspace";
 import type { HttpMethod } from "@/types";
 
 const selectedIndex = ref(0);
+const activeTab = ref("body");
 
 watch(latestRun, (run) => {
   selectedIndex.value = run?.responses.length ? run.responses.length - 1 : 0;
+  activeTab.value = run?.fileRun ? "output" : "body";
 });
 
 const selected = computed(
   () => latestRun.value?.responses[selectedIndex.value] ?? null,
 );
+
+function outputLineClass(line: string): string {
+  if (/: Success /.test(line)) return "text-emerald-500";
+  if (/: Failure /.test(line)) return "text-rose-500";
+  return "";
+}
 
 function statusClass(status: number | null) {
   if (status == null) return "bg-muted text-muted-foreground";
@@ -92,8 +100,11 @@ const body = computed(() =>
         </button>
       </div>
 
-      <Tabs default-value="body" class="flex min-h-0 flex-1 flex-col">
+      <Tabs v-model="activeTab" class="flex min-h-0 flex-1 flex-col">
         <TabsList class="mx-2 mt-1 w-fit bg-transparent">
+          <TabsTrigger v-if="latestRun.fileRun" value="output" class="text-xs">
+            Output
+          </TabsTrigger>
           <TabsTrigger value="body" class="text-xs">Body</TabsTrigger>
           <TabsTrigger value="headers" class="text-xs">
             Headers
@@ -105,6 +116,18 @@ const body = computed(() =>
         </TabsList>
         <ScrollArea class="min-h-0 flex-1">
           <div class="p-3">
+            <TabsContent value="output" class="mt-0">
+              <pre
+                v-if="latestRun.stderr"
+                class="mb-2 font-mono text-xs whitespace-pre-wrap text-rose-400"
+              >{{ latestRun.stderr }}</pre>
+              <pre class="font-mono text-xs whitespace-pre-wrap"><span
+                v-for="(line, i) in latestRun.stdout.split('\n')"
+                :key="i"
+                :class="outputLineClass(line)"
+              >{{ line }}
+</span></pre>
+            </TabsContent>
             <TabsContent value="body" class="mt-0">
               <pre
                 v-if="selected"

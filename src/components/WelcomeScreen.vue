@@ -29,46 +29,46 @@ function dirName(path: string): string {
       </p>
     </div>
 
-    <div class="flex gap-2">
-      <Button size="sm" class="gap-1.5" @click="newWorkspace">
-        <FolderPlusIcon class="size-3.5" />
-        New workspace
-      </Button>
-      <Button variant="outline" size="sm" class="gap-1.5" @click="pickWorkspace">
-        <FolderOpenIcon class="size-3.5" />
-        Open workspace
-      </Button>
-    </div>
-
-    <div v-if="workspace.recentWorkspaces.length" class="w-80">
+    <div v-if="workspace.recentWorkspaces.length" class="w-96">
       <p
-        class="mb-1.5 text-center text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
+        class="mb-3 text-center text-base font-semibold tracking-wide"
       >
         Recent workspaces
       </p>
-      <div class="rounded-md border">
+      <div class="rounded-lg border-2">
         <div
           v-for="dir in workspace.recentWorkspaces"
           :key="dir"
-          class="group flex cursor-pointer items-center gap-2 border-b px-3 py-2 last:border-0 hover:bg-accent"
+          class="group flex cursor-pointer items-center gap-3 border-b px-4 py-3 last:border-0 hover:bg-accent"
           @click="openWorkspaceDir(dir)"
         >
-          <FolderOpenIcon class="size-3.5 shrink-0 text-muted-foreground" />
+          <FolderOpenIcon class="size-5 shrink-0 text-primary" />
           <div class="min-w-0 flex-1">
-            <p class="truncate text-xs font-medium">{{ dirName(dir) }}</p>
-            <p class="truncate font-mono text-[10px] text-muted-foreground">
+            <p class="truncate text-sm font-semibold">{{ dirName(dir) }}</p>
+            <p class="truncate font-mono text-xs text-muted-foreground">
               {{ dir }}
             </p>
           </div>
           <button
-            class="rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-muted"
+            class="rounded p-1 opacity-0 group-hover:opacity-100 hover:bg-muted"
             title="Remove from list"
             @click.stop="removeRecentWorkspace(dir)"
           >
-            <XIcon class="size-3" />
+            <XIcon class="size-3.5" />
           </button>
         </div>
       </div>
+    </div>
+
+    <div class="flex gap-2">
+      <Button variant="ghost" size="sm" class="gap-1.5 text-muted-foreground" @click="newWorkspace">
+        <FolderPlusIcon class="size-3.5" />
+        New workspace
+      </Button>
+      <Button variant="ghost" size="sm" class="gap-1.5 text-muted-foreground" @click="pickWorkspace">
+        <FolderOpenIcon class="size-3.5" />
+        Open workspace
+      </Button>
     </div>
   </div>
 </template>

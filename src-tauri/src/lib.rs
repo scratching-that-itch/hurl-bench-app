@@ -67,24 +67,38 @@ fn hurl_version() -> String {
 }
 
 #[tauri::command]
-async fn run_hurl(content: String) -> Result<HurlRunOutput, String> {
-    tauri::async_runtime::spawn_blocking(move || Ok(execute_hurl(&content)))
-        .await
-        .map_err(|e| format!("task join error: {e}"))?
+async fn run_hurl(
+    content: String,
+    filename: Option<String>,
+    file_root: Option<String>,
+) -> Result<HurlRunOutput, String> {
+    let filename = filename.unwrap_or_else(|| "request.hurl".to_string());
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(execute_hurl(&content, &filename, file_root.as_deref()))
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
 }
 
 /// Runs hurl content in-process with the bundled hurl library and returns
 /// the same output shape the frontend expects from the old CLI runner.
-pub fn execute_hurl(content: &str) -> HurlRunOutput {
+/// `file_root` is the absolute directory of the source file, used to resolve
+/// `file,fixtures/...` body references the same way the CLI does.
+pub fn execute_hurl(content: &str, filename: &str, file_root: Option<&str>) -> HurlRunOutput {
     let start = Instant::now();
-    let runner_opts = RunnerOptionsBuilder::new().build();
+    let mut runner_opts = RunnerOptionsBuilder::new();
+    if let Some(root) = file_root {
+        let root = std::path::Path::new(root);
+        runner_opts.context_dir(&hurl::util::path::ContextDir::new(root, root));
+    }
+    let runner_opts = runner_opts.build();
     let logger_opts = LoggerOptionsBuilder::new().build();
     let variables = VariableSet::new();
-    let filename = Input::new("request.hurl");
+    let input = Input::new(filename);
 
     let result = runner::run(
         content,
-        Some(&filename),
+        Some(&input),
         &runner_opts,
         &variables,
         &logger_opts,
@@ -104,8 +118,8 @@ pub fn execute_hurl(content: &str) -> HurlRunOutput {
         Ok(res) => {
             let bodies = entry_bodies(&res);
             HurlRunOutput {
-                stdout: String::new(),
-                stderr: error_summary(&res),
+                stdout: cli_progress(content, filename, &res),
+                stderr: cli_errors(content, filename, &res),
                 exit_code: if res.success { 0 } else { 1 },
                 duration_ms,
                 body: bodies.last().cloned().unwrap_or_default(),
@@ -114,6 +128,49 @@ pub fn execute_hurl(content: &str) -> HurlRunOutput {
             }
         }
     }
+}
+
+/// CLI `--test`-style progress output:
+/// `file.hurl: Running [1/2]` per executed entry, then a
+/// `Success|Failure (N request(s) in D ms)` summary line.
+fn cli_progress(content: &str, filename: &str, result: &HurlResult) -> String {
+    let total = hurl_core::parser::parse_hurl_file(content)
+        .map(|f| f.entries.len())
+        .unwrap_or(result.entries.len());
+    let mut out = String::new();
+    for (i, _) in result.entries.iter().enumerate() {
+        out.push_str(&format!("{filename}: Running [{}/{}]\n", i + 1, total));
+    }
+    let requests = result.entries.iter().flat_map(|e| &e.calls).count();
+    let status = if result.success { "Success" } else { "Failure" };
+    out.push_str(&format!(
+        "{filename}: {status} ({requests} request(s) in {} ms)\n",
+        result.duration.as_millis()
+    ));
+    out
+}
+
+/// CLI-style annotated error blocks (`error: ... --> file:line:col` with the
+/// source snippet), one per effective error, without color.
+fn cli_errors(content: &str, filename: &str, result: &HurlResult) -> String {
+    use hurl_core::error::{DisplaySourceError, OutputFormat};
+    result
+        .errors()
+        .iter()
+        .map(|(error, src_info)| {
+            // The CLI's logger prefixes the description line with "error: ".
+            format!(
+                "error: {}",
+                error.render(
+                    filename,
+                    content,
+                    Some(*src_info),
+                    OutputFormat::Terminal(false),
+                )
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Body of each entry's last call (after redirects), uncompressed when the
@@ -177,18 +234,6 @@ fn report_assert(assert: &AssertResult) -> ReportAssert {
         line: assert.line(),
         success: assert.to_runner_error().is_none(),
     }
-}
-
-fn error_summary(result: &HurlResult) -> String {
-    if result.success {
-        return String::new();
-    }
-    result
-        .errors()
-        .iter()
-        .map(|(error, _)| format!("{:?}", error.kind))
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 #[derive(Serialize)]
@@ -386,6 +431,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             hurl_version,
             run_hurl,

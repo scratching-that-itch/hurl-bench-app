@@ -27,13 +27,17 @@ export async function hurlVersion(): Promise<string> {
   }
 }
 
-export async function runHurl(content: string): Promise<HurlRunOutput> {
+export async function runHurl(
+  content: string,
+  filename?: string,
+  fileRoot?: string,
+): Promise<HurlRunOutput> {
   if (!isTauri()) {
     throw new Error(
       "Running hurl requires the desktop app. Start it with `pnpm tauri dev`.",
     );
   }
-  return invoke<HurlRunOutput>("run_hurl", { content });
+  return invoke<HurlRunOutput>("run_hurl", { content, filename, fileRoot });
 }
 
 interface ReportResponse {
