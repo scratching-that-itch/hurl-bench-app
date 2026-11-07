@@ -43,7 +43,7 @@ jobs:
       - name: Install Windows dependencies (libxml2, libcurl)
         if: runner.os == 'Windows'
         run: |
-          vcpkg install libxml2:x64-windows-static-md libcurl:x64-windows-static-md
+          vcpkg install libxml2:x64-windows-static-md curl:x64-windows-static-md
           echo "VCPKGRS_TRIPLET=x64-windows-static-md" >> $env:GITHUB_ENV
 
       - name: Install frontend dependencies
